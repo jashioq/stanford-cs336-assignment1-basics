@@ -1,5 +1,5 @@
 from concurrent.futures import ProcessPoolExecutor
-from itertools import pairwise, repeat
+from itertools import islice, pairwise, repeat
 import os
 import regex as re
 
@@ -20,13 +20,65 @@ def train(input_path: str, vocab_size: int, special_tokens: list[str]):
     with ProcessPoolExecutor() as ex:
         dicts = list(ex.map(pretokenize, repeat(input_path), pairwise(boundaries), repeat(special_tokens)))
 
-    counts = {}
+    groups = {}
     for d in dicts:
         for k, v in d.items():
-            counts[k] = counts.get(k, 0) + v
+            groups[k] = groups.get(k, 0) + v
 
-    print(len(counts.keys()))
-    print(len(set(counts.keys())))
+    vocab = {i: bytes([i]) for i in range(256)}
+
+    next_token_id = 256
+    for st in special_tokens:
+        vocab[next_token_id] = st.encode("utf-8")
+        next_token_id += 1
+
+    merges = []
+
+    counts = {}
+    for k, v in groups.items():
+        for p in pairwise(k):
+            counts[p] = counts.get(p, 0) + v
+
+    counts = {key: value for key, value in sorted(counts.items(), key=lambda item: item[1], reverse=True)}
+
+    max_occurance = counts.get(next(iter(counts.keys())))
+    candidates = []
+    for k, v in counts.items():
+        if v == max_occurance:
+            candidates.append(k)
+        else:
+            break
+
+    max_pair = max(candidates)
+    joined = b''.join(max_pair)
+
+    vocab[next_token_id] = joined
+    next_token_id += 1
+
+    merges.append(max_pair)
+
+    print(merges)
+    print(vocab.items())
+        
+
+
+
+
+
+    
+
+    # for k, v in islice(counts.items(), 10):
+    #     print(k, v)
+
+
+    
+
+
+
+
+
+
+
 
 
 def pretokenize(input_path: str, boundries: tuple[int, int], special_tokens: list[str]):
@@ -40,9 +92,16 @@ def pretokenize(input_path: str, boundries: tuple[int, int], special_tokens: lis
     for st in special_tokens:
         chunk = chunk.replace(st, "")
 
-    # Pre-tokenization
-    pre_token_regex = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-    matches = [m.group() for m in re.finditer(pre_token_regex, chunk)]
+
+    if special_tokens:
+        chunks = re.split("|".join(re.escape(st) for st in special_tokens), chunk)
+    else:
+        chunks = [chunk]
+
+    matches = []
+    for c in chunks:  
+        pre_token_regex = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+        matches.extend([m.group() for m in re.finditer(pre_token_regex, c)])
 
     counts = {}
     for m in matches:
@@ -63,4 +122,4 @@ def pretokenize(input_path: str, boundries: tuple[int, int], special_tokens: lis
 
 
 if __name__ == "__main__":
-    train("data/TinyStoriesV2-GPT4-train.txt", 0, "<|endoftext|>")
+    train("data/TinyStoriesV2-GPT4-valid.txt", 0, ["<|endoftext|>"])
