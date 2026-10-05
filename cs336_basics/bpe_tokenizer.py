@@ -34,31 +34,42 @@ def train(input_path: str, vocab_size: int, special_tokens: list[str]):
 
     merges = []
 
-    counts = {}
-    for k, v in groups.items():
-        for p in pairwise(k):
-            counts[p] = counts.get(p, 0) + v
+    for i in range(vocab_size - len(special_tokens) - 256):
+        counts = {}
+        for k, v in groups.items():
+            for p in pairwise(k):
+                counts[p] = counts.get(p, 0) + v
 
-    counts = {key: value for key, value in sorted(counts.items(), key=lambda item: item[1], reverse=True)}
+        counts = {key: value for key, value in sorted(counts.items(), key=lambda item: item[1], reverse=True)}
 
-    max_occurance = counts.get(next(iter(counts.keys())))
-    candidates = []
-    for k, v in counts.items():
-        if v == max_occurance:
-            candidates.append(k)
-        else:
-            break
+        max_occurance = counts.get(next(iter(counts.keys())))
+        candidates = []
+        for k, v in counts.items():
+            if v == max_occurance:
+                candidates.append(k)
+            else:
+                break
 
-    max_pair = max(candidates)
-    joined = b''.join(max_pair)
+        max_pair = max(candidates)
+        joined = b''.join(max_pair)
 
-    vocab[next_token_id] = joined
-    next_token_id += 1
+        vocab[next_token_id] = joined
+        next_token_id += 1
 
-    merges.append(max_pair)
+        merges.append(max_pair)
 
-    print(merges)
-    print(vocab.items())
+        # replace merged pairs here in groups
+
+        keys = [groups.keys()]
+        for k in keys:
+            if len(k) > 1:
+                for f, s in pairwise(k):
+                    j =  b''.join([f, s])
+                    if j == joined:
+                        #replace
+
+        # print(merges)
+        # print(vocab.items())
         
 
 
@@ -122,4 +133,4 @@ def pretokenize(input_path: str, boundries: tuple[int, int], special_tokens: lis
 
 
 if __name__ == "__main__":
-    train("data/TinyStoriesV2-GPT4-valid.txt", 0, ["<|endoftext|>"])
+    train("data/TinyStoriesV2-GPT4-valid.txt", 258, ["<|endoftext|>"])
