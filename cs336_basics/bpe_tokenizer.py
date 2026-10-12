@@ -7,7 +7,7 @@ from cs336_basics.pretokenization_example import find_chunk_boundaries
 
 dummy = " low low low low low lower lower widest widest widest newest newest newest newest newest newest"
 
-def train(input_path: str, vocab_size: int, special_tokens: list[str]):
+def run(input_path: str, vocab_size: int, special_tokens: list[str]):
     with open(input_path, "rb") as file:
         # Split for parallel pre-tokenization
         num_processes = os.cpu_count() or 1
@@ -50,7 +50,7 @@ def train(input_path: str, vocab_size: int, special_tokens: list[str]):
             else:
                 break
 
-        max_pair = max(candidates)
+        max_pair = tuple(max(candidates))
         joined = b''.join(max_pair)
 
         vocab[next_token_id] = joined
@@ -60,36 +60,26 @@ def train(input_path: str, vocab_size: int, special_tokens: list[str]):
 
         # replace merged pairs here in groups
 
-        keys = [groups.keys()]
-        for k in keys:
-            if len(k) > 1:
-                for f, s in pairwise(k):
-                    j =  b''.join([f, s])
-                    if j == joined:
-                        #replace
+        new_groups = {}
+        for k, count in groups.items():
+            new_k = merge_pair(k, max_pair, joined)
+            new_groups[new_k] = new_groups.get(new_k, 0) + count
+        groups = new_groups
 
-        # print(merges)
-        # print(vocab.items())
+    return vocab, merges
         
 
-
-
-
-
-    
-
-    # for k, v in islice(counts.items(), 10):
-    #     print(k, v)
-
-
-    
-
-
-
-
-
-
-
+def merge_pair(key, pair, joined):
+    out = []
+    i = 0
+    while i < len(key):
+        if i + 1 < len(key) and key[i] == pair[0] and key[i + 1] == pair[1]:
+            out.append(joined)
+            i += 2
+        else:
+            out.append(key[i])
+            i += 1
+    return tuple(out)
 
 
 def pretokenize(input_path: str, boundries: tuple[int, int], special_tokens: list[str]):
@@ -100,10 +90,6 @@ def pretokenize(input_path: str, boundries: tuple[int, int], special_tokens: lis
         chunk = file.read(end - start).decode("utf-8", errors="ignore")
 
     # Remove special tokens
-    for st in special_tokens:
-        chunk = chunk.replace(st, "")
-
-
     if special_tokens:
         chunks = re.split("|".join(re.escape(st) for st in special_tokens), chunk)
     else:
@@ -116,7 +102,8 @@ def pretokenize(input_path: str, boundries: tuple[int, int], special_tokens: lis
 
     counts = {}
     for m in matches:
-        b = tuple([char.encode("utf-8") for char in m])
+        encoded = m.encode("utf-8")
+        b = tuple([encoded[i:i+1] for i in range(len(encoded))])
         counts[b] = counts.get(b, 0) + 1
 
     print("process finished pretokenizing a chunk")
@@ -124,13 +111,5 @@ def pretokenize(input_path: str, boundries: tuple[int, int], special_tokens: lis
     return counts
 
 
-
-
-
-
-
-
-
-
-if __name__ == "__main__":
-    train("data/TinyStoriesV2-GPT4-valid.txt", 258, ["<|endoftext|>"])
+def train(input_path: str | os.PathLike, vocab_size: int, special_tokens: list[str]) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+    return run(input_path, vocab_size, special_tokens)
